@@ -1,8 +1,9 @@
 import axios, { AxiosRequestConfig, AxiosResponse } from "axios";
 import Crypto from "crypto";
-import { CoinbaseUser } from "../types/coinbase.types";
+import { ExchangesResponse, UserResponse } from "../types/coinbase.types";
 
 const baseURL = "https://api.coinbase.com";
+const client = axios.create({ baseURL: baseURL });
 
 const apiKey = process.env.COINBASE_API_KEY || "";
 const apiSecret = process.env.COINBASE_API_SECRET || "";
@@ -12,14 +13,17 @@ const getSignature = (
   timeStamp: Number,
   secret: string
 ) => {
-  const message = timeStamp + req.method! + '/v2/user' + (req.data || '');
+  const path = req.url?.replace(baseURL, "");
+  const message = timeStamp + req.method! + path + (req.data || "");
   return Crypto.createHmac("sha256", secret).update(message).digest("hex");
 };
 
-const getSecurityHeaders = (request: AxiosRequestConfig): {} => {
+const getHeaders = (request: AxiosRequestConfig): {} => {
   const timeStamp = Math.floor(Date.now() / 1000);
-  const signature = getSignature(request, timeStamp, apiSecret)
+  const signature = getSignature(request, timeStamp, apiSecret);
   return {
+    Accept: "application/json",
+    "Content-type": "application/json",
     "CB-ACCESS-KEY": apiKey,
     "CB-ACCESS-SIGN": signature,
     "CB-ACCESS-TIMESTAMP": timeStamp,
@@ -27,16 +31,22 @@ const getSecurityHeaders = (request: AxiosRequestConfig): {} => {
 };
 
 export const coinbaseClient = {
-
-  getCounbaseUser: (): Promise<AxiosResponse<CoinbaseUser>> => {
+  getCounbaseUser: (): Promise<AxiosResponse<UserResponse>> => {
     const request: AxiosRequestConfig = {};
-    request.url = baseURL + "/v2/user";
+    request.url = "/v2/user";
     request.method = "GET";
-    request.headers = {
-      "Accept": "application/json",
-      "Content-type": "application/json",
-      ...getSecurityHeaders(request)
+    request.headers = getHeaders(request);
+    return client.get(request.url, request);
+  },
+
+  getExchangeRates: (
+    currency: string
+  ): Promise<AxiosResponse<ExchangesResponse>> => {
+    const request: AxiosRequestConfig = {
+      url: "/v2/exchange-rates?currency=" + currency,
+      method: "GET",
     };
-    return axios.get(request.url, request);
+    request.headers = getHeaders(request);
+    return client.get(request.url!, request)
   },
 };
